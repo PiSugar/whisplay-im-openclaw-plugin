@@ -486,6 +486,23 @@ async function fetchImageAsBase64(url) {
     }
 }
 
+async function sendStatus(baseUrl, token, status, extra = {}) {
+    const body = { status, ...extra };
+    try {
+        const response = await fetch(`${baseUrl}/whisplay-im/status`, {
+            method: "POST",
+            headers: buildHeaders(token),
+            body: JSON.stringify(body),
+        });
+        if (!response.ok) {
+            const respBody = await response.text().catch(() => "");
+            console.warn(`whisplay-im sendStatus failed: HTTP ${response.status}${respBody ? ` ${respBody}` : ""}`);
+        }
+    } catch (err) {
+        console.warn(`whisplay-im sendStatus error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+}
+
 async function sendReply(baseUrl, token, reply, imageBase64) {
     const body = { reply, emoji: "🦞" };
     if (imageBase64) {
@@ -586,7 +603,14 @@ async function emitInboundToGateway(ctx, inbound) {
         ...(inbound.imageBase64 ? { MediaUrl: inbound.imageBase64 } : {}),
     };
 
+    const baseUrl = normalizeBaseUrl(ctx.account?.ip);
+    const accountToken = ctx.account?.token;
+
     const getReplyFromConfig = await loadGetReplyFromConfig();
+
+    // Send "thinking" status before agent processes the message
+    await sendStatus(baseUrl, accountToken, "thinking", { emoji: "🤔", text: inbound.text.slice(0, 80) });
+
     const replyPayload = await getReplyFromConfig(inboundCtx, undefined, ctx.cfg);
     const replies = normalizeReplyPayloads(replyPayload);
     let sentCount = 0;
@@ -599,18 +623,43 @@ async function emitInboundToGateway(ctx, inbound) {
         const firstMediaUrl = mediaUrl || (mediaUrls.length > 0 ? mediaUrls[0] : "");
         const replyText = text || (firstMediaUrl ? "" : payloadToReplyText(payload));
 
+        // Detect tool call indicators in the reply payload
+        const toolName = String(payload?.toolName ?? payload?.tool ?? payload?.functionName ?? "").trim();
+        const toolResult = String(payload?.toolResult ?? payload?.result ?? "").trim();
+        if (toolName) {
+            await sendStatus(baseUrl, accountToken, "tool_calling", {
+                emoji: "🔧",
+                tool: toolName,
+                text: toolResult ? toolResult.slice(0, 120) : `Invoking ${toolName}...`,
+            });
+        }
+
         // Convert media URL to base64 if present
         let imageBase64 = "";
         if (firstMediaUrl) {
+            await sendStatus(baseUrl, accountToken, "tool_calling", {
+                emoji: "🖼️",
+                tool: "fetchImage",
+                text: "Downloading image...",
+            });
             imageBase64 = await fetchImageAsBase64(firstMediaUrl);
         }
 
         if (!replyText && !imageBase64) {
             continue;
         }
-        await sendReply(normalizeBaseUrl(ctx.account?.ip), ctx.account?.token, replyText, imageBase64 || undefined);
+
+        // Send "answering" status before delivering the reply
+        if (replyText) {
+            await sendStatus(baseUrl, accountToken, "answering", { emoji: "🦞" });
+        }
+        await sendReply(baseUrl, accountToken, replyText, imageBase64 || undefined);
         sentCount += 1;
     }
+
+    // Send "idle" status after all replies are delivered
+    await sendStatus(baseUrl, accountToken, "idle", { emoji: "🦞" });
+
     if (sentCount > 0) {
         ctx.setStatus({
             ...ctx.getStatus(),

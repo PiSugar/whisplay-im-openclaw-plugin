@@ -55,9 +55,28 @@ curl -X POST \
   http://<device-host>:18888/whisplay-im/send
 ```
 
+### Send agent status to device
+
+```bash
+# Show thinking status
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"thinking","emoji":"🤔","text":"Processing..."}' \
+  http://<device-host>:18888/whisplay-im/status
+
+# Show tool calling status
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"tool_calling","emoji":"🔧","tool":"generateImage","text":"Generating image..."}' \
+  http://<device-host>:18888/whisplay-im/status
+```
+
 ## Notes
 
 - `poll` returns an empty payload when no message is available.
 - `send` supports optional `emoji` and `imageBase64`.
+- `status` pushes live agent state (thinking, tool_calling, answering, idle) to the device display.
 - Image messages from the device include `imageBase64` in the poll response.
 - All images are transmitted as base64 data URLs.
