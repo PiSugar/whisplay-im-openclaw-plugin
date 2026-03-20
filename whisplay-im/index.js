@@ -141,6 +141,43 @@ function payloadToReplyText(payload) {
     return "";
 }
 
+function sanitizeInboundText(text) {
+    let cleaned = String(text ?? "").trimStart();
+    let changed = false;
+
+    const leadingPatterns = [
+        /^System:\s*\[[^\n]+\](?:\n(?!\n).*)*(?:\n\s*)+/,
+        /^Conversation info \(untrusted metadata\):\s*\n```json[\s\S]*?\n```\s*(?:\n\s*)*/,
+        /^Sender \(untrusted metadata\):\s*\n```json[\s\S]*?\n```\s*(?:\n\s*)*/,
+        /^\[[A-Z][a-z]{2}\s+\d{4}-\d{2}-\d{2}[^\]]+\]\s*/,
+    ];
+
+    while (cleaned) {
+        let stripped = false;
+        for (const pattern of leadingPatterns) {
+            const next = cleaned.replace(pattern, "").trimStart();
+            if (next !== cleaned) {
+                cleaned = next;
+                changed = true;
+                stripped = true;
+                break;
+            }
+        }
+        if (!stripped) {
+            break;
+        }
+    }
+
+    if (!changed) {
+        return { text: String(text ?? ""), changed: false };
+    }
+
+    return {
+        text: cleaned || String(text ?? ""),
+        changed: Boolean(cleaned),
+    };
+}
+
 function toCleanText(value) {
     if (value === null || value === undefined) {
         return "";
@@ -715,6 +752,14 @@ async function emitInboundToGateway(ctx, inbound) {
     const senderId = peer.id;
     const accountLabel = toCleanText(ctx.accountId ?? ctx.account?.accountId ?? ctx.account?.id);
     const senderName = `${peer.name}(${accountLabel || "unknown"})`;
+    const sanitizedInbound = sanitizeInboundText(inbound.text);
+    if (sanitizedInbound.changed) {
+        console.warn(
+            `[whisplay-im] sanitized inbound text for ${senderName}: ` +
+            `${JSON.stringify(String(inbound.text || "").slice(0, 160))} -> ` +
+            `${JSON.stringify(String(sanitizedInbound.text || "").slice(0, 160))}`,
+        );
+    }
     const tsNumber = Number(inbound.timestamp);
     const parsedTimestamp = Number.isFinite(tsNumber) ? tsNumber : Date.now();
     const peerKey = sanitizeSessionPart(senderId || inbound.id || "unknown") || "unknown";
@@ -722,11 +767,11 @@ async function emitInboundToGateway(ctx, inbound) {
     const sessionKey = `agent:main:${CHANNEL_ID}:${accountKey}:direct:${peerKey}`;
 
     const inboundCtx = {
-        Body: inbound.text,
-        BodyForAgent: inbound.text,
-        BodyForCommands: inbound.text,
-        RawBody: inbound.text,
-        CommandBody: inbound.text,
+        Body: sanitizedInbound.text,
+        BodyForAgent: sanitizedInbound.text,
+        BodyForCommands: sanitizedInbound.text,
+        RawBody: sanitizedInbound.text,
+        CommandBody: sanitizedInbound.text,
         SessionKey: sessionKey,
         AccountId: ctx.accountId,
         ConversationLabel: senderName || undefined,
@@ -749,7 +794,7 @@ async function emitInboundToGateway(ctx, inbound) {
     const getReplyFromConfig = await loadGetReplyFromConfig();
 
     // Send "thinking" status before agent processes the message
-    await sendStatus(baseUrl, accountToken, "thinking", { emoji: "🤔", text: inbound.text.slice(0, 80) });
+    await sendStatus(baseUrl, accountToken, "thinking", { emoji: "🤔", text: sanitizedInbound.text.slice(0, 80) });
 
     // Watch the OpenClaw session transcript so tool states do not depend on debug log formatting.
     const logWatcher = createLogWatcher(sessionKey, (evt) => {
