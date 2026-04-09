@@ -1,6 +1,5 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 
 const CHANNEL_ID = "whisplay-im";
 const GATEWAY_LOG_DIR = "/tmp/openclaw";
@@ -11,66 +10,16 @@ const INBOUND_CACHE_LIMIT = 512;
 const pairingRelaySeen = new Map();
 const inboundSeenByAccount = new Map();
 const pollTickByAccount = new Map();
-let dispatchFnLoader = null;
+let pluginRuntime = null;
 
-async function fileExists(filePath) {
-    try {
-        await fs.access(filePath);
-        return true;
-    } catch {
-        return false;
+function getChannelRuntime() {
+    if (!pluginRuntime?.channel) {
+        throw new Error(
+            "whisplay-im: plugin runtime not available — " +
+            "ensure OpenClaw >= 2026.4 and plugin was registered via register(api)",
+        );
     }
-}
-
-async function resolvePluginSdkIndexPath() {
-    const candidates = [
-        "/opt/homebrew/lib/node_modules/openclaw/dist/plugin-sdk/index.js",
-        "/usr/local/lib/node_modules/openclaw/dist/plugin-sdk/index.js",
-        "/home/linuxbrew/.linuxbrew/lib/node_modules/openclaw/dist/plugin-sdk/index.js",
-    ];
-
-    const openclawBinCandidates = [
-        "/opt/homebrew/bin/openclaw",
-        "/usr/local/bin/openclaw",
-        "/opt/local/bin/openclaw",
-        "/home/linuxbrew/.linuxbrew/bin/openclaw",
-    ];
-    for (const binPath of openclawBinCandidates) {
-        try {
-            const realBin = await fs.realpath(binPath);
-            const packageRoot = path.dirname(realBin);
-            candidates.push(path.join(packageRoot, "dist/plugin-sdk/index.js"));
-        } catch {
-            // ignore missing binaries
-        }
-    }
-
-    for (const candidate of candidates) {
-        if (await fileExists(candidate)) {
-            return candidate;
-        }
-    }
-
-    throw new Error(
-        `cannot locate OpenClaw plugin-sdk index.js (checked: ${candidates.join(",")})`,
-    );
-}
-
-async function loadDispatchFn() {
-    if (!dispatchFnLoader) {
-        dispatchFnLoader = (async () => {
-            const indexPath = await resolvePluginSdkIndexPath();
-            const sdkModule = await import(pathToFileURL(indexPath).href);
-            const fn = sdkModule.dispatchReplyFromConfigWithSettledDispatcher;
-            if (typeof fn !== "function") {
-                throw new Error(
-                    `plugin-sdk: dispatchReplyFromConfigWithSettledDispatcher not found in ${indexPath}`,
-                );
-            }
-            return fn;
-        })();
-    }
-    return dispatchFnLoader;
+    return pluginRuntime.channel;
 }
 
 // Build a dispatcher that delivers each reply payload sequentially to the whisplay device.
@@ -204,16 +153,6 @@ function resolveInboundPeer(inbound) {
         id: peerId || "whisplay",
         name: peerName || "whisplay",
     };
-}
-
-function sanitizeSessionPart(value) {
-    return String(value ?? "")
-        .trim()
-        .replace(/[:\s]+/g, "-")
-        .replace(/[^a-zA-Z0-9._-]/g, "-")
-        .replace(/-+/g, "-")
-        .replace(/^-|-$/g, "")
-        .slice(0, 96);
 }
 
 function getPairingSeenSet(accountId) {
@@ -584,6 +523,7 @@ function normalizeInboundItems(payload) {
 }
 
 async function emitInboundToGateway(ctx, inbound) {
+    const channelRuntime = getChannelRuntime();
     const peer = resolveInboundPeer(inbound);
     const senderId = peer.id;
     const accountLabel = toCleanText(ctx.accountId ?? ctx.account?.accountId ?? ctx.account?.id);
@@ -598,9 +538,14 @@ async function emitInboundToGateway(ctx, inbound) {
     }
     const tsNumber = Number(inbound.timestamp);
     const parsedTimestamp = Number.isFinite(tsNumber) ? tsNumber : Date.now();
-    const peerKey = sanitizeSessionPart(senderId || inbound.id || "unknown") || "unknown";
-    const accountKey = sanitizeSessionPart(ctx.accountId || "default") || "default";
-    const sessionKey = `agent:main:${CHANNEL_ID}:${accountKey}:direct:${peerKey}`;
+
+    // Use framework routing instead of hardcoded session keys
+    const route = channelRuntime.routing.resolveAgentRoute({
+        cfg: ctx.cfg,
+        channel: CHANNEL_ID,
+        accountId: ctx.accountId,
+        peer: { kind: "direct", id: senderId || "whisplay" },
+    });
 
     const inboundCtx = {
         Body: sanitizedInbound.text,
@@ -608,7 +553,7 @@ async function emitInboundToGateway(ctx, inbound) {
         BodyForCommands: sanitizedInbound.text,
         RawBody: sanitizedInbound.text,
         CommandBody: sanitizedInbound.text,
-        SessionKey: sessionKey,
+        SessionKey: route.sessionKey,
         AccountId: ctx.accountId,
         ConversationLabel: senderName || undefined,
         SenderName: senderName || undefined,
@@ -626,8 +571,6 @@ async function emitInboundToGateway(ctx, inbound) {
 
     const baseUrl = normalizeBaseUrl(ctx.account?.ip);
     const accountToken = ctx.account?.token;
-
-    const dispatchFn = await loadDispatchFn();
 
     // Send "thinking" status before agent processes the message
     await sendStatus(baseUrl, accountToken, "thinking", { emoji: "🤔", text: sanitizedInbound.text.slice(0, 80) });
@@ -667,31 +610,36 @@ async function emitInboundToGateway(ctx, inbound) {
         sentCount += 1;
     });
 
-    await dispatchFn({
-        cfg: ctx.cfg,
-        ctxPayload: inboundCtx,
+    // Dispatch using channelRuntime (following openclaw-weixin pattern)
+    await channelRuntime.reply.withReplyDispatcher({
         dispatcher,
         onSettled: async () => {
             // All deliveries are complete (waitForIdle resolved) before onSettled is called.
             await sendStatus(baseUrl, accountToken, "idle");
         },
-        replyOptions: {
-            onToolStart: ({ name, phase }) => {
-                if (phase === "end") {
-                    sendStatus(baseUrl, accountToken, "tool_calling", {
-                        emoji: "✅",
-                        tool: name || "tool",
-                        text: `${name || "tool"} done`,
-                    }).catch(() => {});
-                } else {
-                    sendStatus(baseUrl, accountToken, "tool_calling", {
-                        emoji: "🔧",
-                        tool: name || "tool",
-                        text: `Invoking ${name || "tool"}...`,
-                    }).catch(() => {});
-                }
-            },
-        },
+        run: () =>
+            channelRuntime.reply.dispatchReplyFromConfig({
+                ctx: inboundCtx,
+                cfg: ctx.cfg,
+                dispatcher,
+                replyOptions: {
+                    onToolStart: ({ name, phase }) => {
+                        if (phase === "end") {
+                            sendStatus(baseUrl, accountToken, "tool_calling", {
+                                emoji: "✅",
+                                tool: name || "tool",
+                                text: `${name || "tool"} done`,
+                            }).catch(() => {});
+                        } else {
+                            sendStatus(baseUrl, accountToken, "tool_calling", {
+                                emoji: "🔧",
+                                tool: name || "tool",
+                                text: `Invoking ${name || "tool"}...`,
+                            }).catch(() => {});
+                        }
+                    },
+                },
+            }),
     });
 
     if (sentCount > 0) {
@@ -706,7 +654,7 @@ async function emitInboundToGateway(ctx, inbound) {
         });
     }
 
-    return "plugin-sdk.auto-reply.dispatchReplyFromConfigWithSettledDispatcher";
+    return "channelRuntime.reply.dispatchReplyFromConfig";
 }
 
 async function relayGatewayPairingHints({ accountId, baseUrl, token, log, notBeforeMs }) {
@@ -904,9 +852,9 @@ const whisplayImChannel = {
             }
 
             const isAborted = () => Boolean(ctx.abortSignal && ctx.abortSignal.aborted);
-            ctx.log?.warn?.(`[${ctx.accountId}] inbound dispatcher source: plugin-sdk.dispatchReplyFromConfigWithSettledDispatcher`);
-            await loadDispatchFn();
-            ctx.log?.warn?.(`[${ctx.accountId}] inbound dispatcher preflight: dispatchReplyFromConfigWithSettledDispatcher ready`);
+            ctx.log?.warn?.(`[${ctx.accountId}] inbound dispatcher source: channelRuntime.reply`);
+            const channelRuntime = getChannelRuntime();
+            ctx.log?.warn?.(`[${ctx.accountId}] inbound dispatcher preflight: channelRuntime.reply ready`);
             ctx.setStatus({
                 accountId: ctx.accountId,
                 configured: true,
@@ -1032,6 +980,7 @@ const plugin = {
     name: "Whisplay IM",
     description: "Whisplay IM bridge channel plugin",
     register(api) {
+        pluginRuntime = api.runtime;
         api.registerChannel({ plugin: whisplayImChannel });
     },
 };
