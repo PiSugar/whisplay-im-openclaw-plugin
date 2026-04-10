@@ -3,7 +3,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 const CHANNEL_ID = "whisplay-im";
-const MIN_COMPAT_OPENCLAW_VERSION = "2026.3.22";
+const MIN_COMPAT_OPENCLAW_VERSION = "2026.1.0";
 const GATEWAY_LOG_DIR = "/tmp/openclaw";
 const GATEWAY_LOG_FILE_PATTERN = /^openclaw-\d{4}-\d{2}-\d{2}\.log$/;
 const PAIRING_CACHE_LIMIT = 256;
@@ -120,7 +120,7 @@ async function loadLegacyDispatchFn() {
 
             throw new Error(
                 "whisplay-im: no compatible inbound dispatch API found; " +
-                "requires OpenClaw >= 2026.3.22",
+                `requires OpenClaw >= ${MIN_COMPAT_OPENCLAW_VERSION}`,
             );
         })();
     }
