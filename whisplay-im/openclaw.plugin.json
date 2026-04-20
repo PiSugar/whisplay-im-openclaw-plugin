@@ -19,8 +19,8 @@
               "type": "object",
               "properties": {
                 "enabled": { "type": "boolean" },
-                "ip": { "type": "string" },
-                "token": { "type": "string" },
+                "host": { "type": "string" },
+                "authToken": { "type": "string" },
                 "waitSec": { "type": "number" }
               }
             }
