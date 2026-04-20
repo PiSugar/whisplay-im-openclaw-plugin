@@ -4,7 +4,7 @@
 
 - OpenClaw pulls user messages: `GET /whisplay-im/poll`
 - OpenClaw sends reply messages: `POST /whisplay-im/send`
-- Optional authentication supported: `Authorization: Bearer <token>`
+- Optional authentication supported: `Authorization: Bearer <credential>`
 
 ## Compatibility
 
@@ -64,18 +64,18 @@ If you connect multiple Whisplay devices, configure multiple account ids under `
 			"enabled": true,
 			"accounts": {
 				"default": {
-					"ip": "192.168.1.50:18888",
-					"token": "",
+					"host": "192.168.1.50:18888",
+					"credential": "",
 					"waitSec": 60
 				},
 				"home": {
-					"ip": "192.168.1.51:18888",
-					"token": "home-token",
+					"host": "192.168.1.51:18888",
+					"credential": "home-token",
 					"waitSec": 25
 				},
 				"office": {
-					"ip": "10.0.10.20:18888",
-					"token": "office-token",
+					"host": "10.0.10.20:18888",
+					"credential": "office-token",
 					"waitSec": 20
 				}
 			}
@@ -89,7 +89,7 @@ Notes:
 - `default` is recommended as the primary account id.
 - Account ids (`default`, `home`, `office`) become runtime account identifiers in channel status/logs.
 - You can use any stable id names; avoid spaces and keep them short.
-- No top-level device fallback: every active account must define its own `ip`.
+- No top-level device fallback: every active account must define its own `host`.
 
 ### 2) Configure `openclaw.json`
 
@@ -102,8 +102,8 @@ Use this as a complete example for `~/.openclaw/openclaw.json` (focused on `whis
 			"enabled": true,
 			"accounts": {
 				"default": {
-					"ip": "192.168.1.50:18888",
-					"token": "",
+					"host": "192.168.1.50:18888",
+					"credential": "",
 					"waitSec": 60
 				}
 			}
@@ -158,7 +158,7 @@ Minimum required structure:
 			"enabled": true,
 			"accounts": {
 				"default": {
-					"ip": "192.168.1.50:18888"
+					"host": "192.168.1.50:18888"
 				}
 			}
 		}
@@ -166,7 +166,7 @@ Minimum required structure:
 }
 ```
 
-Optional per-account fields: `token`, `waitSec` (default `60`), `enabled`.
+Optional per-account fields: `credential`, `waitSec` (default `60`), `enabled`.
 
 ## Local Debugging
 
@@ -174,7 +174,7 @@ Optional per-account fields: `token`, `waitSec` (default `60`), `enabled`.
 
 ```bash
 curl -X GET \
-	-H "Authorization: Bearer <token>" \
+	-H "Authorization: Bearer <credential>" \
 	"http://<device-host>:18888/whisplay-im/poll?waitSec=60"
 ```
 
@@ -182,7 +182,7 @@ curl -X GET \
 
 ```bash
 curl -X POST \
-	-H "Authorization: Bearer <token>" \
+	-H "Authorization: Bearer <credential>" \
 	-H "Content-Type: application/json" \
 	-d '{"reply":"Hello, I am OpenClaw","emoji":"🤖"}' \
 	"http://<device-host>:18888/whisplay-im/send"
@@ -202,4 +202,4 @@ This implementation follows the protocol in `openclaw/skills/whisplay-im/SKILL.m
 
 - `GET /whisplay-im/poll?waitSec=<n>`
 - `POST /whisplay-im/send`, Body: `{"reply":"...","emoji":"..."}`
-- token is optional
+- credential is optional

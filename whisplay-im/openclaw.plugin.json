@@ -20,7 +20,7 @@
               "properties": {
                 "enabled": { "type": "boolean" },
                 "host": { "type": "string" },
-                "authToken": { "type": "string" },
+                "credential": { "type": "string" },
                 "waitSec": { "type": "number" }
               }
             }

@@ -489,6 +489,7 @@ function resolveAccountSection(cfg, accountId) {
         typeof section?.host === "string" ||
         typeof section?.ip === "string" ||
         typeof section?.authToken === "string" ||
+        typeof section?.credential === "string" ||
         typeof section?.token === "string" ||
         typeof section?.waitSec === "number";
     const effectiveHost =
@@ -498,17 +499,20 @@ function resolveAccountSection(cfg, accountId) {
                 ? accountSection.ip
                 : "";
     const effectiveToken =
-        typeof accountSection?.authToken === "string"
-            ? accountSection.authToken
-            : typeof accountSection?.token === "string"
-                ? accountSection.token
-                : "";
+        typeof accountSection?.credential === "string"
+            ? accountSection.credential
+            : typeof accountSection?.authToken === "string"
+                ? accountSection.authToken
+                : typeof accountSection?.token === "string"
+                    ? accountSection.token
+                    : "";
     return {
         enabled: section?.enabled !== false,
         ...(accountSection && typeof accountSection === "object" ? accountSection : {}),
         ip: effectiveHost,
         host: effectiveHost,
         token: effectiveToken,
+        credential: effectiveToken,
         authToken: effectiveToken,
         accountId: accountKey,
         hasAccountSection: Boolean(accountSection && typeof accountSection === "object" && Object.keys(accountSection).length > 0),
@@ -545,8 +549,8 @@ function normalizeAccountsConfig(accountsValue) {
 function buildAccountConfigError(accountId, account) {
     const prefix = `whisplay-im account "${accountId}" is not configured`;
     const guidance =
-        `Configure channels.${CHANNEL_ID}.accounts.${accountId}.host (e.g. 192.168.1.10:18888), plus optional authToken/waitSec. ` +
-        `Top-level channels.${CHANNEL_ID}.host/ip/authToken/token/waitSec are not supported.`;
+        `Configure channels.${CHANNEL_ID}.accounts.${accountId}.host (e.g. 192.168.1.10:18888), plus optional credential/waitSec. ` +
+        `Top-level channels.${CHANNEL_ID}.host/ip/credential/authToken/token/waitSec are not supported.`;
     if (account?.hasLegacyTopLevelDeviceConfig) {
         return `${prefix}: detected legacy top-level device fields. ${guidance}`;
     }
@@ -891,7 +895,7 @@ const whisplayImChannel = {
                         properties: {
                             enabled: { type: "boolean" },
                             host: { type: "string" },
-                            authToken: { type: "string" },
+                            credential: { type: "string" },
                             waitSec: { type: "number" },
                         },
                     },
@@ -921,6 +925,7 @@ const whisplayImChannel = {
                 ip: typeof effective?.ip === "string" ? effective.ip : "",
                 host: typeof effective?.host === "string" ? effective.host : "",
                 token: typeof effective?.token === "string" ? effective.token : "",
+                credential: typeof effective?.credential === "string" ? effective.credential : "",
                 authToken: typeof effective?.authToken === "string" ? effective.authToken : "",
                 waitSec:
                     typeof effective?.waitSec === "number" && Number.isFinite(effective.waitSec)
