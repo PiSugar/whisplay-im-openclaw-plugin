@@ -867,12 +867,11 @@ const whisplayImChannel = {
             properties: {
                 enabled: { type: "boolean" },
                 accounts: {
-                    type: "array",
-                    items: {
+                    type: "object",
+                    additionalProperties: {
                         type: "object",
                         additionalProperties: false,
                         properties: {
-                            id: { type: "string" },
                             enabled: { type: "boolean" },
                             ip: { type: "string" },
                             token: { type: "string" },

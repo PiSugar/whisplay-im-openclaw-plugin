@@ -5,5 +5,29 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {}
+  },
+  "channelConfigs": {
+    "whisplay-im": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": { "type": "boolean" },
+          "accounts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "ip": { "type": "string" },
+                "token": { "type": "string" },
+                "waitSec": { "type": "number" }
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }
