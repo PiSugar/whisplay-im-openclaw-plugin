@@ -488,7 +488,6 @@ function resolveAccountSection(cfg, accountId) {
     const hasLegacyTopLevelDeviceConfig =
         typeof section?.host === "string" ||
         typeof section?.ip === "string" ||
-        typeof section?.authToken === "string" ||
         typeof section?.credential === "string" ||
         typeof section?.token === "string" ||
         typeof section?.waitSec === "number";
@@ -501,11 +500,9 @@ function resolveAccountSection(cfg, accountId) {
     const effectiveToken =
         typeof accountSection?.credential === "string"
             ? accountSection.credential
-            : typeof accountSection?.authToken === "string"
-                ? accountSection.authToken
-                : typeof accountSection?.token === "string"
-                    ? accountSection.token
-                    : "";
+            : typeof accountSection?.token === "string"
+                ? accountSection.token
+                : "";
     return {
         enabled: section?.enabled !== false,
         ...(accountSection && typeof accountSection === "object" ? accountSection : {}),
@@ -513,7 +510,6 @@ function resolveAccountSection(cfg, accountId) {
         host: effectiveHost,
         token: effectiveToken,
         credential: effectiveToken,
-        authToken: effectiveToken,
         accountId: accountKey,
         hasAccountSection: Boolean(accountSection && typeof accountSection === "object" && Object.keys(accountSection).length > 0),
         hasLegacyTopLevelDeviceConfig,
@@ -550,7 +546,7 @@ function buildAccountConfigError(accountId, account) {
     const prefix = `whisplay-im account "${accountId}" is not configured`;
     const guidance =
         `Configure channels.${CHANNEL_ID}.accounts.${accountId}.host (e.g. 192.168.1.10:18888), plus optional credential/waitSec. ` +
-        `Top-level channels.${CHANNEL_ID}.host/ip/credential/authToken/token/waitSec are not supported.`;
+        `Top-level channels.${CHANNEL_ID}.host/ip/credential/token/waitSec are not supported.`;
     if (account?.hasLegacyTopLevelDeviceConfig) {
         return `${prefix}: detected legacy top-level device fields. ${guidance}`;
     }
@@ -926,7 +922,6 @@ const whisplayImChannel = {
                 host: typeof effective?.host === "string" ? effective.host : "",
                 token: typeof effective?.token === "string" ? effective.token : "",
                 credential: typeof effective?.credential === "string" ? effective.credential : "",
-                authToken: typeof effective?.authToken === "string" ? effective.authToken : "",
                 waitSec:
                     typeof effective?.waitSec === "number" && Number.isFinite(effective.waitSec)
                         ? effective.waitSec
