@@ -870,7 +870,6 @@ const whisplayImChannel = {
                     type: "object",
                     additionalProperties: {
                         type: "object",
-                        additionalProperties: false,
                         properties: {
                             enabled: { type: "boolean" },
                             ip: { type: "string" },
