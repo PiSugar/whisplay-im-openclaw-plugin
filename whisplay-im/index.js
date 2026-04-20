@@ -1,4 +1,5 @@
 import { promises as fs } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -75,7 +76,7 @@ async function resolveOpenClawPackageRoot() {
         }
     }
 
-    const homeDir = process.env.HOME || "/home/pi";
+    const homeDir = os.homedir();
     const nvmVersionsDir = path.join(homeDir, ".nvm/versions/node");
     try {
         const entries = await fs.readdir(nvmVersionsDir);

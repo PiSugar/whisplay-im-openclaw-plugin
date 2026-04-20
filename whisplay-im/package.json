@@ -5,6 +5,7 @@
   "private": true,
   "openclaw": {
     "extensions": ["./index.js"],
+    "hooks": [],
     "channel": {
       "id": "whisplay-im",
       "label": "Whisplay IM",
