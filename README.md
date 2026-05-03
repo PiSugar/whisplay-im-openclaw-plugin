@@ -51,7 +51,29 @@ Notes:
 - Replace the path with your real absolute path.
 - `--link` keeps plugin code linked to your local workspace (good for local development).
 - If already installed, uninstall first: `openclaw plugins uninstall whisplay-im --force`.
-- If needed, explicitly enable plugin: `openclaw plugins enable whisplay-im`.
+- Local/workspace plugins may stay disabled by default on newer OpenClaw builds until explicitly enabled.
+- After install, run `openclaw plugins enable whisplay-im` or set `plugins.entries.whisplay-im.enabled: true` in `~/.openclaw/openclaw.json`.
+- `openclaw plugins install` does not auto-create `channels.whisplay-im`; use the helper script below to write the channel config safely.
+
+### 1.1) Apply channel config with helper script
+
+After installation, run the helper script once per device/account you want to configure:
+
+```bash
+./scripts/configure-whisplay-im.sh --host 192.168.0.66:18888 --account chatbot-zero --wait-sec 60 --restart
+```
+
+Notes:
+
+- The script writes `plugins.entries.whisplay-im.enabled = true`.
+- The script writes `channels.whisplay-im.enabled = true`.
+- The script writes `channels.whisplay-im.accounts.<account-id>.*`.
+- Set `OPENCLAW_BIN` if your active OpenClaw executable is not on `PATH`, for example:
+
+```bash
+OPENCLAW_BIN=/home/pi/.npm-global/bin/openclaw \
+./scripts/configure-whisplay-im.sh --host 192.168.0.66:18888 --account chatbot-zero --restart
+```
 
 ### 1.2) Multi-device / multi-account `accounts` example
 
@@ -59,6 +81,13 @@ If you connect multiple Whisplay devices, configure multiple account ids under `
 
 ```json
 {
+	"plugins": {
+		"entries": {
+			"whisplay-im": {
+				"enabled": true
+			}
+		}
+	},
 	"channels": {
 		"whisplay-im": {
 			"enabled": true,
@@ -78,6 +107,21 @@ If you connect multiple Whisplay devices, configure multiple account ids under `
 					"credential": "office-token",
 					"waitSec": 20
 				}
+			}
+		}
+	}
+}
+```
+
+If you use `plugins.allow`, add `whisplay-im` there too or OpenClaw will silently refuse to load this plugin:
+
+```json
+{
+	"plugins": {
+		"allow": ["whisplay-im"],
+		"entries": {
+			"whisplay-im": {
+				"enabled": true
 			}
 		}
 	}
@@ -118,6 +162,8 @@ Use this as a complete example for `~/.openclaw/openclaw.json` (focused on `whis
 openclaw gateway restart
 ```
 
+If you used `./scripts/configure-whisplay-im.sh --restart`, you can skip this manual restart.
+
 ### 4) Verify plugin is loaded
 
 ```bash
@@ -126,6 +172,13 @@ openclaw channels status
 ```
 
 You should see `Whisplay IM` in configured/running channels.
+
+If `openclaw plugins info whisplay-im` works but `openclaw channels status` does not show the channel, check these first:
+
+- `plugins.entries.whisplay-im.enabled` is `true`
+- `plugins.allow` is absent, empty, or includes `whisplay-im`
+- `channels.whisplay-im.accounts.<account-id>.host` exists
+- the gateway was restarted after install or enablement
 
 ## Uninstall
 
